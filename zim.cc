@@ -3,6 +3,7 @@
 
 #ifdef MAKE_ZIM_SUPPORT
 
+#include <QtConcurrent>
 #include "zim.hh"
 #include "btreeidx.hh"
 #include "fsencoding.hh"
@@ -186,6 +187,8 @@ public:
   const ZIM_header & header() const
   { return zimHeader; }
   string getClusterData( quint32 cluster_nom );
+  char readClusterData( quint32 cluster_nom, QByteArray &compressed );
+  string decompressData( const QByteArray &data, char compressionType );
 
 private:
   ZIM_header zimHeader;
@@ -312,46 +315,9 @@ string ZimFile::getClusterData( quint32 cluster_nom )
 
   // Cache miss, read data from file
 
-  // Read cluster pointers
-
-  quint64 clusters[ 2 ];
-  seek( zimHeader.clusterPtrPos + cluster_nom * 8 );
-  if( read( reinterpret_cast< char * >( clusters ), sizeof(clusters) ) != sizeof(clusters) )
-    return string();
-
-  // Calculate cluster size
-
-  quint64 clusterSize;
-  if( cluster_nom < zimHeader.clusterCount - 1 )
-    clusterSize = clusters[ 1 ] - clusters[ 0 ];
-  else
-    clusterSize = size() - clusters[ 0 ];
-
-  // Read cluster data
-
-  seek( clusters[ 0 ] );
-
-  char compressionType;
-  if( !getChar( &compressionType ) )
-    return string();
-
-  string decompressedData;
-
-  QByteArray data = read( clusterSize );
-
-  if( compressionType == Default || compressionType == None )
-    decompressedData = string( data.data(), data.size() );
-  else
-  if( compressionType == Zlib )
-    decompressedData = decompressZlib( data.constData(), data.size() );
-  else
-  if( compressionType == Bzip2 )
-    decompressedData = decompressBzip2( data.constData(), data.size() );
-  else
-  if( compressionType == Lzma2 )
-    decompressedData = decompressLzma2( data.constData(), data.size() );
-  else
-    return string();
+  QByteArray compressedData;
+  char compressType = readClusterData( cluster_nom, compressedData );
+  string decompressedData = decompressData(compressedData, compressType);
 
   // Check BLOBs number in the cluster
   // We cache multi-element clusters only
@@ -386,6 +352,54 @@ string ZimFile::getClusterData( quint32 cluster_nom )
   }
 
   return decompressedData;
+}
+
+char ZimFile::readClusterData( quint32 cluster_nom, QByteArray &compressed )
+{
+  // Read cluster pointers
+
+  quint64 clusters[ 2 ];
+  seek( zimHeader.clusterPtrPos + cluster_nom * 8 );
+  if( read( reinterpret_cast< char * >( clusters ), sizeof(clusters) ) != sizeof(clusters) )
+    return None;
+
+  // Calculate cluster size
+
+  quint64 clusterSize;
+  if( cluster_nom < zimHeader.clusterCount - 1 )
+    clusterSize = clusters[ 1 ] - clusters[ 0 ];
+  else
+    clusterSize = size() - clusters[ 0 ];
+
+  // Read cluster data
+
+  seek( clusters[ 0 ] );
+
+  char compressionType;
+  if( !read( &compressionType, 1 ) )
+    return None;
+
+  compressed.reserve(clusterSize);
+  compressed.resize(read( compressed.data(), clusterSize ));
+
+  return compressionType;
+}
+
+string ZimFile::decompressData( const QByteArray &data, char compressionType )
+{
+  if( compressionType == Default || compressionType == None )
+    return string( data.data(), data.size() );
+  else
+  if( compressionType == Zlib )
+    return decompressZlib( data.constData(), data.size() );
+  else
+  if( compressionType == Bzip2 )
+    return decompressBzip2( data.constData(), data.size() );
+  else
+  if( compressionType == Lzma2 )
+    return decompressLzma2( data.constData(), data.size() );
+  else
+    return string();
 }
 
 // Some supporting functions
@@ -601,6 +615,9 @@ private:
                          bool rawText = false );
 
     string convert( string const & in_data );
+    void collectFTSWords(
+                         QVector<QPair<uint32_t, string> > *articles,
+                         QMap< QString, QVector< uint32_t > > *ftsWords);
     friend class ZimArticleRequest;
     friend class ZimResourceRequest;
 };
@@ -932,6 +949,18 @@ QString const& ZimDictionary::getDescription()
     return dictionaryDescription;
 }
 
+void ZimDictionary::collectFTSWords(
+        QVector<QPair<uint32_t, string> > *articles,
+        QMap< QString, QVector< uint32_t > > *ftsWords)
+{
+  auto end = articles->end();
+  for (auto it = articles->begin(); it != end; ++it) {
+    QString text = Html::unescape(
+            QString::fromUtf8( it->second.data(), it->second.size() ) );
+    FtsHelpers::parseArticleForFts(it->first, text, *ftsWords);
+  }
+}
+
 void ZimDictionary::makeFTSIndex( QAtomicInt & isCancelled, bool firstIteration )
 {
   if( !( Dictionary::needToRebuildIndex( getDictionaryFilenames(), ftsIdxName )
@@ -950,93 +979,149 @@ void ZimDictionary::makeFTSIndex( QAtomicInt & isCancelled, bool firstIteration 
   gdDebug( "Zim: Building the full-text index for dictionary: %s\n",
            getName().c_str() );
 
-  try
-  {
-    Mutex::Lock _( getFtsMutex() );
+  try {
+    QSet<uint32_t> setOfOffsets;
+    setOfOffsets.reserve(getWordCount());
 
-    File::Class ftsIdx( ftsIndexName(), "wb" );
+    gdDebug("findArticleLinks to setOfOffsets @size = ");
+    findArticleLinks(0, &setOfOffsets, 0, &isCancelled);
+    gdDebug("%d\n", setOfOffsets.size());
 
-    FtsHelpers::FtsIdxHeader ftsIdxHeader;
-    memset( &ftsIdxHeader, 0, sizeof( ftsIdxHeader ) );
-
-    // We write a dummy header first. At the end of the process the header
-    // will be rewritten with the right values.
-
-    ftsIdx.write( ftsIdxHeader );
-
-    ChunkedStorage::Writer chunks( ftsIdx );
-
-    BtreeIndexing::IndexedWords indexedWords;
-
-    QSet< uint32_t > setOfOffsets;
-    setOfOffsets.reserve( getWordCount() );
-
-    findArticleLinks( 0, &setOfOffsets, 0, &isCancelled );
-
-    if( Qt4x5::AtomicInt::loadAcquire( isCancelled ) )
+    if (Qt4x5::AtomicInt::loadAcquire(isCancelled))
       throw exUserAbort();
 
     // We should sort articles order by cluster number
     // to effective use clusters data caching
 
-    QVector< QPair< quint32, uint32_t > > offsetsWithClusters;
-    offsetsWithClusters.reserve( setOfOffsets.size() );
+    QVector<QPair<quint32, uint32_t> > offsetsWithClusters;
+    offsetsWithClusters.reserve(setOfOffsets.size());
+    gdDebug("create offsetsWithClusters.\n");
 
-    for( QSet< uint32_t >::ConstIterator it = setOfOffsets.constBegin();
-         it != setOfOffsets.constEnd(); ++it )
-    {
-      if( Qt4x5::AtomicInt::loadAcquire( isCancelled ) )
+    for (QSet<uint32_t>::ConstIterator it = setOfOffsets.constBegin();
+         it != setOfOffsets.constEnd(); ++it) {
+      if (Qt4x5::AtomicInt::loadAcquire(isCancelled))
         throw exUserAbort();
 
-      Mutex::Lock _( zimMutex );
-      offsetsWithClusters.append( QPair< uint32_t, quint32 >( getArticleCluster( df, *it ), *it ) );
+      Mutex::Lock _(zimMutex);
+      offsetsWithClusters.append(QPair<uint32_t, quint32>(getArticleCluster(df, *it), *it));
     }
 
     // Free memory
     setOfOffsets.clear();
 
-    if( Qt4x5::AtomicInt::loadAcquire( isCancelled ) )
+    if (Qt4x5::AtomicInt::loadAcquire(isCancelled))
       throw exUserAbort();
 
-    qSort( offsetsWithClusters );
+    gdDebug("qSort  offsetsWithClusters.\n");
+    qSort(offsetsWithClusters);
 
-    QVector< uint32_t > offsets;
-    offsets.resize( offsetsWithClusters.size() );
-    for( int i = 0; i < offsetsWithClusters.size(); i++ )
-      offsets[ i ] = offsetsWithClusters.at( i ).second;
+    gdDebug("create offsets.\n");
+    QVector<uint32_t> offsets;
+    offsets.resize(offsetsWithClusters.size());
+    for (int i = 0; i < offsetsWithClusters.size(); i++)
+      offsets[i] = offsetsWithClusters.at(i).second;
 
     // Free memory
     offsetsWithClusters.clear();
 
-    if( Qt4x5::AtomicInt::loadAcquire( isCancelled ) )
+    if (Qt4x5::AtomicInt::loadAcquire(isCancelled))
       throw exUserAbort();
 
-    QMap< QString, QVector< uint32_t > > ftsWords;
+    QMap<QString, QVector<uint32_t> > ftsWords;
 
-    set< quint32 > indexedArticles;
+    set<quint32> indexedArticles;
     quint32 articleNumber;
+    const int thread_count = 8;
+    const int batch_size = 10000;
+    QVector < QMap < QString, QVector<uint32_t> > > ftsWordVector(thread_count);
+    QVector<QFuture<void> > futures(thread_count);
+    QVector<QVector<QPair<uint32_t, string> > > buf(thread_count);
+    int t = 0;
+    buf[t].reserve(batch_size);
 
     // index articles for full-text search
-    for( int i = 0; i < offsets.size(); i++ )
-    {
-      if( Qt4x5::AtomicInt::loadAcquire( isCancelled ) )
-        throw exUserAbort();
+    try {
+      Mutex::Lock _(zimMutex);
+      for (int i = 0; i < offsets.size(); i++) {
+        uint32_t articleAddress = offsets.at(i);
+        QString headword, articleStr;
+        string articleText;
 
-      QString headword, articleStr;
+        articleNumber = readArticle(df, articleAddress, articleText, &indexedArticles);
+        if (articleNumber == 0xFFFFFFFF)
+          continue;
 
-      articleNumber = getArticleText( offsets.at( i ), headword, articleStr,
-                                      &indexedArticles );
-      if( articleNumber == 0xFFFFFFFF )
-        continue;
-
-      indexedArticles.insert( articleNumber );
-
-      FtsHelpers::parseArticleForFts( offsets.at( i ), articleStr, ftsWords );
+        indexedArticles.insert(articleNumber);
+        buf[t].append(QPair<uint32_t, string>(articleAddress, articleText));
+        if (buf[t].size() == batch_size) {
+          gdDebug("create ftsWords for offsets @%d.", i);
+          if (Qt4x5::AtomicInt::loadAcquire(isCancelled))
+            throw exUserAbort();
+          futures[t] = QtConcurrent::run(this, &ZimDictionary::collectFTSWords,
+                                         &buf[t], &ftsWordVector[t]);
+          t = (t + 1) % thread_count;
+          if (buf[t].size() > 0) {
+            futures[t].waitForFinished();
+          }
+          buf[t].clear();
+          buf[t].reserve(batch_size);
+        }
+      }
+    } catch( std::exception &ex ) {
+      gdWarning( "Zim: Failed retrieving article from \"%s\", reason: %s\n", getName().c_str(), ex.what() );
     }
 
+    if (buf[t].size() > 0) {
+      futures[t] = QtConcurrent::run(this, &ZimDictionary::collectFTSWords,
+              &buf[t], &ftsWordVector[t]);
+    }
+    for (int i=0; i<thread_count; ++i)
+    {
+      if (buf[i].size() > 0) {
+        futures[i].waitForFinished();
+        buf[i].clear();
+      }
+      auto end = ftsWordVector[i].cend();
+      for( auto it = ftsWordVector[i].cbegin(); it != end; ++it)
+        ftsWords[it.key()] += it.value();
+      ftsWordVector[i].clear();
+    }
+
+    uint64_t guestBtreeSize = 0;
+    uint32_t chunkSize = 0;
+    bool newBlock = true;
+    QList<QString> chunkKeys;
+    ChunkedStorage::ChunkCounter chunkCounter;
+    for ( auto end=ftsWords.cend(), it=ftsWords.cbegin(); it != end; ++it) {
+      if (newBlock)
+        chunkKeys.push_back(it.key());
+      newBlock = chunkCounter.startNewBlock(
+              sizeof(uint32_t) * (it.value().size() + 1));
+    }
+    uint64_t totalChunkSize = chunkCounter.finish();
     // Free memory
     offsets.clear();
 
+    Mutex::Lock _(getFtsMutex());
+
+    File::Class ftsIdx(ftsIndexName(), "wb");
+
+    FtsHelpers::FtsIdxHeader ftsIdxHeader;
+    memset(&ftsIdxHeader, 0, sizeof(ftsIdxHeader));
+
+    // We write a dummy header first. At the end of the process the header
+    // will be rewritten with the right values.
+
+    ftsIdx.write(ftsIdxHeader);
+
+    BtreeIndexing::BtreeSizeCounter btreeSizeCounter(ftsWords.keys());
+    uint64_t btreeOffset = ftsIdx.tell();
+    ftsIdx.seek(btreeOffset + btreeSizeCounter.getIndexTotalSize());
+    ChunkedStorage::Writer chunks(ftsIdx, totalChunkSize);
+
+    BtreeIndexing::IndexedWords indexedWords;
+
+    gdDebug("create indexedWords for offsets @%d. %d left.\n", indexedWords.size(), ftsWords.size());
     QMap< QString, QVector< uint32_t > >::iterator it = ftsWords.begin();
     while( it != ftsWords.end() )
     {
@@ -1052,6 +1137,8 @@ void ZimDictionary::makeFTSIndex( QAtomicInt & isCancelled, bool firstIteration 
       indexedWords.addSingleWord( gd::toWString( it.key() ), offset );
 
       it = ftsWords.erase( it );
+      if(indexedWords.size()%100000 == 0)
+        gdDebug("create indexedWords for offsets @%d. %d left.\n", indexedWords.size(), ftsWords.size());
     }
 
     // Free memory
@@ -1066,6 +1153,7 @@ void ZimDictionary::makeFTSIndex( QAtomicInt & isCancelled, bool firstIteration 
     if( Qt4x5::AtomicInt::loadAcquire( isCancelled ) )
       throw exUserAbort();
 
+    ftsIdx.seek(btreeOffset);
     BtreeIndexing::IndexInfo ftsIdxInfo = BtreeIndexing::buildIndex( indexedWords, ftsIdx );
 
     // Free memory

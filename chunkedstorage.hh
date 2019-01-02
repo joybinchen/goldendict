@@ -30,16 +30,41 @@ DEF_EX( exFailedToCompressChunk, "Failed to compress a chunk", Ex )
 DEF_EX( exAddressOutOfRange, "The given chunked address is out of range", Ex )
 DEF_EX( exFailedToDecompressChunk, "Failed to decompress a chunk", Ex )
 
+/// This class calculate chunk counts for data blocks
+class ChunkCounter
+{
+public:
+
+    ChunkCounter();
+
+    /// Starts new block.
+    bool startNewBlock(size_t size);
+
+    /// Finishes writing chunks and returns the offset to the chunk table which
+    /// gets written at the moment of finishing.
+    uint64_t finish();
+
+private:
+    // The amount of data stored in buffer so far. We keep it separate
+    // from buffer.size() for performance reasons; the latter one only
+    // grows, but never shrinks.
+    size_t bufferUsed;
+    uint64_t chunkCount;
+    vector<uint64_t> keySizes;
+
+    void saveCurrentChunk();
+};
+
 /// This class writes data blocks in chunks.
 class Writer
 {
-  vector< uint32_t > offsets;
+  vector< uint64_t > offsets;
   File::Class & file;
   size_t scratchPadOffset, scratchPadSize;
 
 public:
 
-  Writer( File::Class & );
+  Writer( File::Class &, uint32_t padSize=4096);
 
   /// Starts new block. Returns its address.
   uint32_t startNewBlock();
@@ -49,7 +74,7 @@ public:
 
   /// Finishes writing chunks and returns the offset to the chunk table which
   /// gets written at the moment of finishing.
-  uint32_t finish();
+  uint64_t finish();
 
 private:
 
@@ -75,13 +100,13 @@ private:
 /// This class reads data blocks previously written by Writer.
 class Reader
 {
-  vector< uint32_t > offsets;
+  vector< uint64_t > offsets;
   File::Class & file;
 
 public:
   /// Creates reader by giving it a file to read from and the offset returned
   /// by Writer::finish().
-  Reader( File::Class &, uint32_t );
+  Reader( File::Class &, uint64_t );
 
   /// Reads the block previously written by Writer, identified by its address.
   /// Uses the user-provided storage to load the entire chunk, and then to

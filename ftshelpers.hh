@@ -31,7 +31,7 @@ struct FtsIdxHeader
 {
   uint32_t signature; // First comes the signature, FTSX
   uint32_t formatVersion; // File format version
-  uint32_t chunksOffset; // The offset to chunks' storage
+  uint64_t chunksOffset; // The offset to chunks' storage
   uint32_t indexBtreeMaxElements; // Two fields from IndexInfo
   uint32_t indexRootOffset;
   uint32_t wordCount; // Number of unique words this dictionary has

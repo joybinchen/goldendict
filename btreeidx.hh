@@ -69,6 +69,17 @@ struct IndexInfo
   {}
 };
 
+class BtreeSizeCounter {
+public:
+    BtreeSizeCounter(const QList<QString> &indexingWords);
+    uint32_t getRootNodeSize();
+    uint32_t getIndexTotalSize();
+
+private:
+    QVector<QString> words;
+    size_t btreeMaxElements;
+};
+
 /// Base btree indexing class which allows using what buildIndex() function
 /// created. It's quite low-lovel and is basically a set of 'bulding blocks'
 /// functions.
@@ -126,7 +137,7 @@ protected:
 
   /// Reads a node or leaf at the given offset. Just uncompresses its data
   /// to the given vector and does nothing more.
-  void readNode( uint32_t offset, vector< char > & out );
+  void readNode( uint64_t offset, vector< char > & out );
 
   /// Reads the word-article links' chain at the given offset. The pointer
   /// is updated to point to the next chain, if there's any.

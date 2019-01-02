@@ -49,8 +49,53 @@ using std::pair;
 enum
 {
   BtreeMinElements = 64,
-  BtreeMaxElements = 4096
+  BtreeMaxElements = 65536
 };
+
+BtreeSizeCounter::BtreeSizeCounter(const QList<QString> &indexingWords) {
+  for( const auto it : indexingWords ) {
+    if( !it.isEmpty() )
+        words.push_back(it);
+  }
+
+  btreeMaxElements = ( (size_t) sqrt( (double) words.size() ) ) + 1;
+
+  if ( btreeMaxElements < BtreeMinElements )
+    btreeMaxElements = BtreeMinElements;
+  else
+  if ( btreeMaxElements > BtreeMaxElements )
+    btreeMaxElements = BtreeMaxElements;
+}
+
+uint32_t BtreeSizeCounter::getRootNodeSize()
+{
+  uint32_t size = sizeof(uint32_t) + sizeof(uint32_t); //compressedSize + uncompressedSize
+  size += sizeof(uint32_t) + (btreeMaxElements + 1) * sizeof(uint64_t); //nodeType + offsets
+  uint64_t indexSize = words.size();
+  for(int x = 0; x < btreeMaxElements; x++ )
+  {
+    unsigned curEntry = (uint64_t) indexSize * ( x + 1 ) / ( btreeMaxElements + 1 );
+    size += words[curEntry].size() + 1; // word size
+  }
+  gdDebug("%s return %d",__PRETTY_FUNCTION__, size);
+  return size;
+}
+
+uint32_t BtreeSizeCounter::getIndexTotalSize()
+{
+  uint32_t size = words.size() * (sizeof(uint32_t) + 2); //offset + 2 * '\0'
+    gdDebug("%s return %d",__PRETTY_FUNCTION__, size);
+  for(const auto it : words)
+  {
+    size += it.size();
+  }
+    gdDebug("%s return %d",__PRETTY_FUNCTION__, size);
+  size += btreeMaxElements * (sizeof(uint32_t) * 2 + sizeof(uint64_t)); //compressedSize + uncompressedSize + lastLeafLinkOffset
+    gdDebug("%s return %d",__PRETTY_FUNCTION__, size);
+  size += getRootNodeSize();
+  gdDebug("%s return %d",__PRETTY_FUNCTION__, size);
+  return size;
+}
 
 BtreeIndex::BtreeIndex():
   idxFile( 0 ), rootNodeLoaded( false )
@@ -496,7 +541,7 @@ sptr< Dictionary::WordSearchRequest > BtreeDictionary::stemmedMatch(
                                      false, maxResults );
 }
 
-void BtreeIndex::readNode( uint32_t offset, vector< char > & out )
+void BtreeIndex::readNode( uint64_t offset, vector< char > & out )
 {
   idxFile->seek( offset );
 
@@ -552,7 +597,7 @@ char const * BtreeIndex::findChainOffsetExactOrPrefix( wstring const & target,
 
   // Read a node
 
-  uint32_t currentNodeOffset = rootOffset;
+  uint64_t currentNodeOffset = rootOffset;
 
   if ( !rootNodeLoaded )
   {
@@ -574,11 +619,11 @@ char const * BtreeIndex::findChainOffsetExactOrPrefix( wstring const & target,
       if ( leafEntries == 0xffffFFFF )
       {
         // A node
-        currentNodeOffset = *( (uint32_t *)leaf + 1 );
+        currentNodeOffset = *( (uint64_t *)(leaf + sizeof(uint32_t)) );
         readNode( currentNodeOffset, extLeaf );
         leaf = &extLeaf.front();
         leafEnd = leaf + extLeaf.size();
-        nextLeaf = idxFile->read< uint32_t >();
+        nextLeaf = idxFile->read< uint64_t >();
       }
       else
       {
@@ -608,10 +653,10 @@ char const * BtreeIndex::findChainOffsetExactOrPrefix( wstring const & target,
 
       //DPRINTF( "=>a node\n" );
 
-      uint32_t const * offsets = (uint32_t *)leaf + 1;
+      uint64_t const * offsets = (uint64_t *)(leaf + sizeof(uint32_t));
 
       char const * ptr = leaf + sizeof( uint32_t ) +
-                         ( indexNodeSize + 1 ) * sizeof( uint32_t );
+                         ( indexNodeSize + 1 ) * sizeof( uint64_t );
 
       // ptr now points to a span of zero-separated strings, up to leafEnd.
       // We find our match using a binary search.
@@ -743,7 +788,7 @@ char const * BtreeIndex::findChainOffsetExactOrPrefix( wstring const & target,
       // If this leaf is the root, there's no next leaf, it just can't be.
       // We do this check because the file's position indicator just won't
       // be in the right place for root node anyway, since we precache it.
-      nextLeaf = ( currentNodeOffset != rootOffset ? idxFile->read< uint32_t >() : 0 );
+      nextLeaf = ( currentNodeOffset != rootOffset ? idxFile->read< uint64_t >() : 0 );
 
       if ( !leafEntries )
       {
@@ -856,7 +901,7 @@ char const * BtreeIndex::findChainOffsetExactOrPrefix( wstring const & target,
   
                 leafEnd = &extLeaf.front() + extLeaf.size();
   
-                nextLeaf = idxFile->read< uint32_t >();
+                nextLeaf = idxFile->read< uint64_t >();
   
                 return &extLeaf.front() + sizeof( uint32_t );
               }
@@ -941,21 +986,27 @@ void BtreeIndex::antialias( wstring const & str,
 /// A function which recursively creates btree node.
 /// The nextIndex iterator is being iterated over and increased when building
 /// leaf nodes.
-static uint32_t buildBtreeNode( IndexedWords::const_iterator & nextIndex,
+static uint64_t buildBtreeNode( IndexedWords::const_iterator & nextIndex,
                                 size_t indexSize,
                                 File::Class & file, size_t maxElements,
-                                uint32_t & lastLeafLinkOffset )
+                                uint64_t & lastLeafLinkOffset )
 {
   // We compress all the node data. This buffer would hold it.
   vector< unsigned char > uncompressedData;
+  uint64_t head = file.tell();
 
   bool isLeaf = indexSize <= maxElements;
+  size_t reservedSize = 0;
+  string thisWord;
+  if(!nextIndex->second.empty())
+    thisWord = nextIndex->second.front().word;
 
   if ( isLeaf )
   {
     // A leaf.
 
     uint32_t totalChainsLength = 0;
+    QVector< uint32_t > chainLengths(indexSize+1);
 
     IndexedWords::const_iterator nextWord = nextIndex;
 
@@ -965,8 +1016,12 @@ static uint32_t buildBtreeNode( IndexedWords::const_iterator & nextIndex,
 
       vector< WordArticleLink > const & chain = nextWord->second;
 
+      uint32_t chainLength = 0;
       for( unsigned y = 0; y < chain.size(); ++y )
-        totalChainsLength += chain[ y ].word.size() + 1 + chain[ y ].prefix.size() + 1 + sizeof( uint32_t );
+        chainLength += chain[ y ].word.size() + 1 + chain[ y ].prefix.size() + 1 + sizeof( uint32_t );
+
+      totalChainsLength += chainLength;
+      chainLengths[x] = chainLength;
     }
 
     uncompressedData.resize( sizeof( uint32_t ) + totalChainsLength );
@@ -980,11 +1035,10 @@ static uint32_t buildBtreeNode( IndexedWords::const_iterator & nextIndex,
     {
       vector< WordArticleLink > const & chain = nextIndex->second;
 
-      unsigned char * saveSizeHere = ptr;
+      uint32_t size = chainLengths[x];
+      memcpy( ptr, &size, sizeof( uint32_t ) );
 
       ptr += sizeof( uint32_t );
-
-      uint32_t size = 0;
 
       for( unsigned y = 0; y < chain.size(); ++y )
       {
@@ -996,21 +1050,23 @@ static uint32_t buildBtreeNode( IndexedWords::const_iterator & nextIndex,
 
         memcpy( ptr, &(chain[ y ].articleOffset), sizeof( uint32_t ) );
         ptr += sizeof( uint32_t );
-
-        size += chain[ y ].word.size() + 1 + chain[ y ].prefix.size() + 1 + sizeof( uint32_t );
       }
-
-      memcpy( saveSizeHere, &size, sizeof( uint32_t ) );
     }
   }
   else
   {
     // A node which will have children.
 
-    uncompressedData.resize( sizeof( uint32_t ) + ( maxElements + 1 ) * sizeof( uint32_t ) );
+    size_t uncompressedSize = sizeof( uint32_t ) + ( maxElements + 1 ) * sizeof( uint64_t );
+    reservedSize = uncompressedSize * 4;
+
+    uncompressedData.reserve(reservedSize);
+    uncompressedData.resize(uncompressedSize);
 
     // First uint32_t indicates that this is a node.
     *(uint32_t *)&uncompressedData.front() = 0xffffFFFF;
+
+    file.seek(head + reservedSize);
 
     unsigned prevEntry = 0;
 
@@ -1018,12 +1074,13 @@ static uint32_t buildBtreeNode( IndexedWords::const_iterator & nextIndex,
     {
       unsigned curEntry = (uint64_t) indexSize * ( x + 1 ) / ( maxElements + 1 );
 
-      uint32_t offset = buildBtreeNode( nextIndex,
+      uint64_t offset = buildBtreeNode( nextIndex,
                                         curEntry - prevEntry,
                                         file, maxElements,
                                         lastLeafLinkOffset );
+      gdDebug("buildBtreeNode for indexSize=%d max=%d #%d @%lu.\n", indexSize, maxElements, x, offset);
 
-      memcpy( &uncompressedData.front() + sizeof( uint32_t ) + x * sizeof( uint32_t ), &offset, sizeof( uint32_t ) );
+      memcpy( &uncompressedData.front() + sizeof( uint32_t ) + x * sizeof( uint64_t ), &offset, sizeof( uint64_t ) );
 
       size_t sz = nextIndex->first.size() + 1;
 
@@ -1037,12 +1094,12 @@ static uint32_t buildBtreeNode( IndexedWords::const_iterator & nextIndex,
     }
 
     // Rightmost child
-    uint32_t offset = buildBtreeNode( nextIndex,
+    uint64_t offset = buildBtreeNode( nextIndex,
                                       indexSize - prevEntry,
                                       file, maxElements,
                                       lastLeafLinkOffset );
     memcpy( &uncompressedData.front() + sizeof( uint32_t ) +
-            maxElements * sizeof( uint32_t ), &offset, sizeof( offset ) );
+            maxElements * sizeof( offset ), &offset, sizeof( offset ) );
   }
 
   // Save the result.
@@ -1078,18 +1135,37 @@ static uint32_t buildBtreeNode( IndexedWords::const_iterator & nextIndex,
 
   #endif
 
-  uint32_t offset = file.tell();
+  uint64_t offset = file.tell();
 
+  if ( !isLeaf && compressedSize <= reservedSize ) {
+    file.seek(head);
+    head = offset;
+    offset = file.tell();
+  }
+  gdDebug("writing %s @%d\tcompressed=%d\tuncompressed=%d\tnextLeafLink @%d lastLeafLink @%d word=%s",
+          (isLeaf?"leaf":"node"),
+          offset,
+          compressedSize,
+          uncompressedData.size(),
+          offset + sizeof(uint32_t) * 2 + compressedSize,
+          lastLeafLinkOffset,
+          thisWord.c_str()
+  );
   file.write< uint32_t >( uncompressedData.size() );
   file.write< uint32_t >( compressedSize );
   file.write( &compressedData.front(), compressedSize );
+  if ( !isLeaf && compressedSize <= reservedSize ) {
+    for (int x=reservedSize-compressedSize-sizeof(uint32_t)*3; x; --x)
+        file.write<char>(0);
+    file.seek(head);
+  }
 
   if ( isLeaf )
   {
     // A link to the next leef, which is zero and which will be updated
     // should we happen to have another leaf.
     
-    file.write( ( uint32_t ) 0 );
+    file.write( ( uint64_t ) 0 );
 
     uint32_t here = file.tell();
 
@@ -1102,7 +1178,7 @@ static uint32_t buildBtreeNode( IndexedWords::const_iterator & nextIndex,
     }
 
     // Make sure next leaf knows where to write its offset for us.
-    lastLeafLinkOffset = here - sizeof( uint32_t );
+    lastLeafLinkOffset = here - sizeof( offset );
   }
 
   return offset;
@@ -1258,9 +1334,9 @@ IndexInfo buildIndex( IndexedWords const & indexedWords, File::Class & file )
   GD_DPRINTF( "Building a tree of %u elements\n", (unsigned) btreeMaxElements );
 
 
-  uint32_t lastLeafOffset = 0;
+  uint64_t lastLeafOffset = 0;
 
-  uint32_t rootOffset = buildBtreeNode( nextIndex, indexSize,
+  uint64_t rootOffset = buildBtreeNode( nextIndex, indexSize,
                                         file, btreeMaxElements,
                                         lastLeafOffset );
 
@@ -1290,8 +1366,8 @@ void BtreeIndex::findArticleLinks( QVector< WordArticleLink > * articleLinks,
                                    QSet< QString > *headwords,
                                    QAtomicInt * isCancelled )
 {
-  uint32_t currentNodeOffset = rootOffset;
-  uint32_t nextLeaf = 0;
+  uint64_t currentNodeOffset = rootOffset;
+  uint64_t nextLeaf = 0;
   uint32_t leafEntries;
 
   Mutex::Lock _( *idxFileMutex );
@@ -1321,11 +1397,11 @@ void BtreeIndex::findArticleLinks( QVector< WordArticleLink > * articleLinks,
     if ( leafEntries == 0xffffFFFF )
     {
       // A node
-      currentNodeOffset = *( (uint32_t *)leaf + 1 );
+      currentNodeOffset = *( (uint64_t *)(leaf + sizeof(uint32_t)) );
       readNode( currentNodeOffset, extLeaf );
       leaf = &extLeaf.front();
       leafEnd = leaf + extLeaf.size();
-      nextLeaf = idxFile->read< uint32_t >();
+      nextLeaf = idxFile->read< uint64_t >();
     }
     else
     {
@@ -1396,7 +1472,7 @@ void BtreeIndex::findArticleLinks( QVector< WordArticleLink > * articleLinks,
         leaf = &extLeaf.front();
         leafEnd = leaf + extLeaf.size();
 
-        nextLeaf = idxFile->read< uint32_t >();
+        nextLeaf = idxFile->read< uint64_t >();
         chainPtr = leaf + sizeof( uint32_t );
 
         leafEntries = *(uint32_t *)leaf;
@@ -1414,8 +1490,8 @@ void BtreeIndex::getHeadwordsFromOffsets( QList<uint32_t> & offsets,
                                           QVector<QString> & headwords,
                                           QAtomicInt * isCancelled )
 {
-  uint32_t currentNodeOffset = rootOffset;
-  uint32_t nextLeaf = 0;
+  uint64_t currentNodeOffset = rootOffset;
+  uint64_t nextLeaf = 0;
   uint32_t leafEntries;
 
   qSort( offsets );
@@ -1447,11 +1523,11 @@ void BtreeIndex::getHeadwordsFromOffsets( QList<uint32_t> & offsets,
     if ( leafEntries == 0xffffFFFF )
     {
       // A node
-      currentNodeOffset = *( (uint32_t *)leaf + 1 );
+      currentNodeOffset = *( (uint64_t *)(leaf + sizeof(uint32_t)) );
       readNode( currentNodeOffset, extLeaf );
       leaf = &extLeaf.front();
       leafEnd = leaf + extLeaf.size();
-      nextLeaf = idxFile->read< uint32_t >();
+      nextLeaf = idxFile->read< uint64_t >();
     }
     else
     {
@@ -1512,7 +1588,7 @@ void BtreeIndex::getHeadwordsFromOffsets( QList<uint32_t> & offsets,
         leaf = &extLeaf.front();
         leafEnd = leaf + extLeaf.size();
 
-        nextLeaf = idxFile->read< uint32_t >();
+        nextLeaf = idxFile->read< uint64_t >();
         chainPtr = leaf + sizeof( uint32_t );
 
         leafEntries = *(uint32_t *)leaf;

@@ -195,8 +195,24 @@ void MediaWikiWordSearchRequest::downloadFinished()
 
     QString errorStr;
     int errorLine, errorColumn;
+    bool finished = netReply->isFinished();
+    QHash<QString, QString> requestHeaders;
+    QList<QByteArray> requestHeaderList = netReply->request().rawHeaderList();
+    for (auto header: requestHeaderList) {
+        QString headerValue = netReply->request().rawHeader(header);
+        requestHeaders[header] = headerValue;
+    }
 
-    if ( !dd.setContent( netReply.get(), false, &errorStr, &errorLine, &errorColumn  ) )
+    QHash<QString, QString> headers;
+    QList<QByteArray> headerList = netReply->rawHeaderList();
+    for (auto header: headerList) {
+        QString headerValue = netReply->rawHeader(header);
+        headers[header] = headerValue;
+    }
+    QByteArray replyData = netReply->readAll();
+    QString replyContent(replyData);
+
+    if ( !dd.setContent( replyContent/*netReply.get()*/, false, &errorStr, &errorLine, &errorColumn  ) )
     {
       setErrorString( QString( tr( "XML parse error: %1 at %2,%3" ).
                                arg( errorStr ).arg( errorLine ).arg( errorColumn ) ) );

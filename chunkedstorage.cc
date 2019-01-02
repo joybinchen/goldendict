@@ -2,6 +2,7 @@
  * Part of GoldenDict. Licensed under GPLv3 or later, see the LICENSE file */
 
 #include "chunkedstorage.hh"
+#include "gddebug.hh"
 #include <zlib.h>
 #include <string.h>
 
@@ -12,8 +13,30 @@ enum
   ChunkMaxSize = 65536 // Can't be more since it would overflow the address
 };
 
-Writer::Writer( File::Class & f ):
-  file( f ), chunkStarted( false ), bufferUsed( 0 )
+ChunkCounter::ChunkCounter():
+        bufferUsed(0), chunkCount(0)
+{}
+
+bool ChunkCounter::startNewBlock(size_t size)
+{
+  bufferUsed += size;
+  if( bufferUsed >= ChunkMaxSize ) {
+    ++chunkCount;
+    bufferUsed = 0;
+    return true;
+  }
+  return false;
+}
+
+uint64_t ChunkCounter::finish()
+{
+  if( bufferUsed )
+    ++chunkCount;
+  return chunkCount * sizeof(uint64_t) + sizeof(uint32_t);
+}
+
+Writer::Writer( File::Class & f, uint32_t padSize ):
+  file( f ), chunkStarted( false ), bufferUsed( 0 ), scratchPadSize(0)
 {
   // Create a sratchpad at the beginning of file. We use it to write chunk
   // table if it would fit, in order to save some seek times.
@@ -23,9 +46,12 @@ Writer::Writer( File::Class & f ):
   memset( zero, 0, sizeof( zero ) );
 
   scratchPadOffset = file.tell();
-  scratchPadSize = sizeof( zero );
 
-  file.write( zero, sizeof( zero ) );
+  while (scratchPadSize < padSize ) {
+    scratchPadSize += sizeof(zero);
+    file.write(zero, sizeof(zero));
+  }
+  gdDebug("%s padSize=%d scratchPadSize=%d @%u", __PRETTY_FUNCTION__, padSize, scratchPadSize, file.tell());
 }
 
 uint32_t Writer::startNewBlock()
@@ -73,6 +99,9 @@ void Writer::saveCurrentChunk()
     throw exFailedToCompressChunk();
 
   offsets.push_back( file.tell() );
+  gdDebug("%s\tsize=%d\tcompressed=%d\toffsetCount=%d\t@%lu",
+          __PRETTY_FUNCTION__, bufferUsed, compressedSize,
+          offsets.size(), file.tell());
 
   file.write( (uint32_t) bufferUsed );
   file.write( (uint32_t) compressedSize );
@@ -83,27 +112,27 @@ void Writer::saveCurrentChunk()
   chunkStarted = false;
 }
 
-uint32_t Writer::finish()
+uint64_t Writer::finish()
 {
   if ( bufferUsed || chunkStarted )
     saveCurrentChunk();
 
   bool useScratchPad = false;
-  uint32_t savedOffset = 0;
+  uint64_t savedOffset = 0;
 
-  if ( scratchPadSize >= offsets.size() * sizeof( uint32_t ) + sizeof( uint32_t ) )
+  if ( scratchPadSize >= offsets.size() * sizeof( offsets.front() ) + sizeof( uint32_t ) )
   {
     useScratchPad = true;
     savedOffset = file.tell();
     file.seek( scratchPadOffset );
   }
 
-  uint32_t offset = file.tell();
+  uint64_t offset = file.tell();
 
   file.write( (uint32_t) offsets.size() );
 
   if ( offsets.size() )
-    file.write( &offsets.front(), offsets.size() * sizeof( uint32_t ) );
+    file.write( &offsets.front(), offsets.size() * sizeof( offsets.front() ) );
 
   if ( useScratchPad )
     file.seek( savedOffset );
@@ -114,7 +143,7 @@ uint32_t Writer::finish()
   return offset;
 }
 
-Reader::Reader( File::Class & f, uint32_t offset ): file( f )
+Reader::Reader( File::Class & f, uint64_t offset ): file( f )
 {
   file.seek( offset );
 
@@ -122,7 +151,7 @@ Reader::Reader( File::Class & f, uint32_t offset ): file( f )
   if ( size == 0 )
     return;
   offsets.resize( size );
-  file.read( &offsets.front(), offsets.size() * sizeof( uint32_t ) );
+  file.read( &offsets.front(), offsets.size() * sizeof( offsets.front() ) );
 }
 
 char * Reader::getBlock( uint32_t address, vector< char > & chunk )
