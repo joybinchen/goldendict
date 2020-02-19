@@ -312,6 +312,9 @@ void StardictDictionary::loadIcon() throw()
 
 string StardictDictionary::loadString( size_t size )
 {
+  if( size == 0 )
+    return string();
+
   vector< char > data( size );
 
   idx.read( &data.front(), data.size() );
@@ -1902,6 +1905,7 @@ void StardictResourceRequest::run()
       memcpy( &data.front(), bytes.constData(), bytes.size() );
     }
 
+    Mutex::Lock _( dataMutex );
     hasAnyData = true;
   }
   catch( std::exception &ex )
