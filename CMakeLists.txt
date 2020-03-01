@@ -1,11 +1,36 @@
 cmake_minimum_required(VERSION 2.8.8)
-project(gdb-Release LANGUAGES C CXX)
+project(goldendict LANGUAGES C CXX)
 
 find_package(Threads)
-add_compile_options(  -rdynamic -pipe -Wall -W)
-add_link_options( 
-	-Wl,-rpath-link,/usr/lib/x86_64-linux-gnu
-)
+add_subdirectory(locale)
+add_subdirectory(redist)
+add_subdirectory(help)
+
+find_package(Qt5 COMPONENTS Concurrent Core Gui Help Multimedia Network PrintSupport Sql Svg WebKit WebKitWidgets Widgets X11Extras Xml REQUIRED)
+find_package(PkgConfig  REQUIRED)
+pkg_check_modules(AO REQUIRED  ao)
+pkg_check_modules(AOM REQUIRED  aom)
+pkg_check_modules(GL REQUIRED  gl)
+pkg_check_modules(HUNSPELL REQUIRED  hunspell)
+pkg_check_modules(LIBAVCODEC REQUIRED  libavcodec)
+pkg_check_modules(LIBAVFORMAT REQUIRED  libavformat)
+pkg_check_modules(LIBAVUTIL REQUIRED  libavutil)
+pkg_check_modules(LIBLZMA REQUIRED  liblzma)
+pkg_check_modules(LIBSWRESAMPLE REQUIRED  libswresample)
+pkg_check_modules(LIBTIFF4 REQUIRED  libtiff-4)
+pkg_check_modules(OGG REQUIRED  ogg)
+pkg_check_modules(VDPAU REQUIRED  vdpau)
+pkg_check_modules(VORBIS REQUIRED  vorbis)
+pkg_check_modules(VORBISFILE REQUIRED  vorbisfile)
+pkg_check_modules(X11 REQUIRED  x11)
+pkg_check_modules(XEXT REQUIRED  xext)
+pkg_check_modules(XTST REQUIRED  xtst)
+pkg_check_modules(XV REQUIRED  xv)
+pkg_check_modules(ZLIB REQUIRED  zlib)
+add_compile_options(  -pipe -Wall -W)
+
+add_link_options(  -rdynamic)
+
 add_compile_definitions( 
 	_REENTRANT
 	MAKE_QTMULTIMEDIA_PLAYER
@@ -31,190 +56,117 @@ add_compile_definitions(
 	QT_CONCURRENT_LIB
 	QT_CORE_LIB
 )
-include_directories( AFTER
+
+set(INCLUDE_DIRS 
 	.
 	Release
 	qtsingleapplication/src
 	Release/build
 	/usr/lib/x86_64-linux-gnu/qt5/mkspecs/linux-clang
 )
-include_directories(SYSTEM AFTER
-	/usr/include/hunspell
-	/usr/local/include
-	/usr/include/x86_64-linux-gnu/qt5
-	/usr/include/x86_64-linux-gnu/qt5/QtSvg
-	/usr/include/x86_64-linux-gnu/qt5/QtWebKitWidgets
-	/usr/include/x86_64-linux-gnu/qt5/QtPrintSupport
-	/usr/include/x86_64-linux-gnu/qt5/QtHelp
-	/usr/include/x86_64-linux-gnu/qt5/QtWidgets
-	/usr/include/x86_64-linux-gnu/qt5/QtWebKit
-	/usr/include/x86_64-linux-gnu/qt5/QtMultimedia
-	/usr/include/x86_64-linux-gnu/qt5/QtX11Extras
-	/usr/include/x86_64-linux-gnu/qt5/QtGui
-	/usr/include/x86_64-linux-gnu/qt5/QtXml
-	/usr/include/x86_64-linux-gnu/qt5/QtNetwork
-	/usr/include/x86_64-linux-gnu/qt5/QtSql
-	/usr/include/x86_64-linux-gnu/qt5/QtConcurrent
-	/usr/include/x86_64-linux-gnu/qt5/QtCore
-	/usr/include/libdrm
+list(REMOVE_DUPLICATES  INCLUDE_DIRS)
+include_directories(  ${INCLUDE_DIRS})
+
+set(ISYSTEM_DIRS 
+	${HUNSPELL_INCLUDE_DIR}
+	${AOM_INCLUDE_DIR}
+	${Qt5Concurrent_INCLUDE_DIRS}
+	${Qt5Svg_INCLUDE_DIRS}
+	${Qt5WebKitWidgets_INCLUDE_DIRS}
+	${Qt5PrintSupport_INCLUDE_DIRS}
+	${Qt5Help_INCLUDE_DIRS}
+	${Qt5Multimedia_INCLUDE_DIRS}
+	${Qt5X11Extras_INCLUDE_DIRS}
+	${Qt5Gui_INCLUDE_DIRS}
+	${Qt5Xml_INCLUDE_DIRS}
+	${GL_INCLUDE_DIR}
 )
+list(REMOVE_DUPLICATES  ISYSTEM_DIRS)
+include_directories(ISYSTEM  ${ISYSTEM_DIRS})
 
-foreach(X
-	about
-	article_maker
-	article_netmgr
-	articleinspector
-	articleview
-	articlewebview
-	audioplayerinterface
-	config
-	dictheadwords
-	dictinfo
-	dictionary
-	dictionarybar
-	dictspanewidget
-	editdictionaries
-	externalaudioplayer
-	externalviewer
-	extlineedit
-	favoritespanewidget
-	ffmpegaudio
-	ffmpegaudioplayer
-	forvo
-	fulltextsearch
-	gdappstyle
-	groupcombobox
-	groups
-	groups_widgets
-	helpwindow
-	history
-	historypanewidget
-	hotkeyedit
-	hotkeywrapper
-	initializing
-	loaddictionaries
-	mainstatusbar
-	maintabwidget
-	mainwindow
-	mediawiki
-	mouseover
-	mruqmenu
-	multimediaaudioplayer
-	orderandprops
-	preferences
-	programs
-	scanflag
-	scanpopup
-	sources
-	stylescombobox
-	translatebox
-	webmultimediadownload
-	website
-	wordfinder
-	wordlist
+qt5_wrap_cpp(goldendict_moc_SRCS
+	about.hh
+	article_maker.hh
+	article_netmgr.hh
+	articleinspector.hh
+	articleview.hh
+	articlewebview.hh
+	audioplayerinterface.hh
+	config.hh
+	dictheadwords.hh
+	dictinfo.hh
+	dictionary.hh
+	dictionarybar.hh
+	dictspanewidget.hh
+	editdictionaries.hh
+	externalaudioplayer.hh
+	externalviewer.hh
+	extlineedit.hh
+	favoritespanewidget.hh
+	ffmpegaudio.hh
+	ffmpegaudioplayer.hh
+	forvo.hh
+	fulltextsearch.hh
+	gdappstyle.hh
+	groupcombobox.hh
+	groups.hh
+	groups_widgets.hh
+	helpwindow.hh
+	history.hh
+	historypanewidget.hh
+	hotkeyedit.hh
+	hotkeywrapper.hh
+	initializing.hh
+	loaddictionaries.hh
+	mainstatusbar.hh
+	maintabwidget.hh
+	mainwindow.hh
+	mediawiki.hh
+	mouseover.hh
+	mruqmenu.hh
+	multimediaaudioplayer.hh
+	orderandprops.hh
+	preferences.hh
+	programs.hh
+	qtsingleapplication/src/qtlocalpeer.h
+	qtsingleapplication/src/qtsingleapplication.h
+	scanflag.hh
+	scanpopup.hh
+	sources.hh
+	stylescombobox.hh
+	translatebox.hh
+	webmultimediadownload.hh
+	website.hh
+	wordfinder.hh
+	wordlist.hh
 )
-	add_custom_command(OUTPUT Release/build/moc_${X}.cpp
-		COMMAND moc --include ${CMAKE_CURRENT_SOURCE_DIR}/Release/build/moc_predefs.h -I/usr/lib/x86_64-linux-gnu/qt5/mkspecs/linux-clang -I${CMAKE_CURRENT_SOURCE_DIR}/. -I${CMAKE_CURRENT_SOURCE_DIR}/. -I${CMAKE_CURRENT_SOURCE_DIR}/qtsingleapplication/src -I/usr/include/hunspell -I/usr/local/include -I/usr/include/x86_64-linux-gnu/qt5 -I/usr/include/x86_64-linux-gnu/qt5/QtSvg -I/usr/include/x86_64-linux-gnu/qt5/QtWebKitWidgets -I/usr/include/x86_64-linux-gnu/qt5/QtPrintSupport -I/usr/include/x86_64-linux-gnu/qt5/QtHelp -I/usr/include/x86_64-linux-gnu/qt5/QtWidgets -I/usr/include/x86_64-linux-gnu/qt5/QtWebKit -I/usr/include/x86_64-linux-gnu/qt5/QtMultimedia -I/usr/include/x86_64-linux-gnu/qt5/QtX11Extras -I/usr/include/x86_64-linux-gnu/qt5/QtGui -I/usr/include/x86_64-linux-gnu/qt5/QtXml -I/usr/include/x86_64-linux-gnu/qt5/QtNetwork -I/usr/include/x86_64-linux-gnu/qt5/QtSql -I/usr/include/x86_64-linux-gnu/qt5/QtConcurrent -I/usr/include/x86_64-linux-gnu/qt5/QtCore -I${CMAKE_CURRENT_SOURCE_DIR}/Release -I/usr/include/c++/7.4.0 -I/usr/include/x86_64-linux-gnu/c++/7.4.0 -I/usr/include/c++/7.4.0/backward -I/usr/include/clang/6.0.0/include -I/usr/local/include -I/usr/include/x86_64-linux-gnu -I/usr/include -DMAKE_QTMULTIMEDIA_PLAYER -DMAKE_FFMPEG_PLAYER -DHAVE_X11 -DPROGRAM_DATA_DIR="/opt/goldendict/share/goldendict/" -DPROGRAM_VERSION="1.5.0-RC2+git" -DMAKE_ZIM_SUPPORT -DMAKE_EXTRA_TIFF_HANDLER -DQT_NO_DEBUG -DQT_SVG_LIB -DQT_WEBKITWIDGETS_LIB -DQT_PRINTSUPPORT_LIB -DQT_HELP_LIB -DQT_WIDGETS_LIB -DQT_WEBKIT_LIB -DQT_MULTIMEDIA_LIB -DQT_X11EXTRAS_LIB -DQT_GUI_LIB -DQT_XML_LIB -DQT_NETWORK_LIB -DQT_SQL_LIB -DQT_CONCURRENT_LIB -DQT_CORE_LIB
-		${X}.hh
-		-o ${CMAKE_CURRENT_BINARY_DIR}/Release/build/moc_${X}.cpp
-	)
-
-endforeach(X)
-
-foreach(X qtlocalpeer qtsingleapplication)
-	add_custom_command(OUTPUT Release/build/moc_${X}.cpp
-		COMMAND moc --include ${CMAKE_CURRENT_SOURCE_DIR}/Release/build/moc_predefs.h -I/usr/lib/x86_64-linux-gnu/qt5/mkspecs/linux-clang -I${CMAKE_CURRENT_SOURCE_DIR}/. -I${CMAKE_CURRENT_SOURCE_DIR}/. -I${CMAKE_CURRENT_SOURCE_DIR}/qtsingleapplication/src -I/usr/include/hunspell -I/usr/local/include -I/usr/include/x86_64-linux-gnu/qt5 -I/usr/include/x86_64-linux-gnu/qt5/QtSvg -I/usr/include/x86_64-linux-gnu/qt5/QtWebKitWidgets -I/usr/include/x86_64-linux-gnu/qt5/QtPrintSupport -I/usr/include/x86_64-linux-gnu/qt5/QtHelp -I/usr/include/x86_64-linux-gnu/qt5/QtWidgets -I/usr/include/x86_64-linux-gnu/qt5/QtWebKit -I/usr/include/x86_64-linux-gnu/qt5/QtMultimedia -I/usr/include/x86_64-linux-gnu/qt5/QtX11Extras -I/usr/include/x86_64-linux-gnu/qt5/QtGui -I/usr/include/x86_64-linux-gnu/qt5/QtXml -I/usr/include/x86_64-linux-gnu/qt5/QtNetwork -I/usr/include/x86_64-linux-gnu/qt5/QtSql -I/usr/include/x86_64-linux-gnu/qt5/QtConcurrent -I/usr/include/x86_64-linux-gnu/qt5/QtCore -I${CMAKE_CURRENT_SOURCE_DIR}/Release -I/usr/include/c++/7.4.0 -I/usr/include/x86_64-linux-gnu/c++/7.4.0 -I/usr/include/c++/7.4.0/backward -I/usr/include/clang/6.0.0/include -I/usr/local/include -I/usr/include/x86_64-linux-gnu -I/usr/include -DMAKE_QTMULTIMEDIA_PLAYER -DMAKE_FFMPEG_PLAYER -DHAVE_X11 -DPROGRAM_DATA_DIR="/opt/goldendict/share/goldendict/" -DPROGRAM_VERSION="1.5.0-RC2+git" -DMAKE_ZIM_SUPPORT -DMAKE_EXTRA_TIFF_HANDLER -DQT_NO_DEBUG -DQT_SVG_LIB -DQT_WEBKITWIDGETS_LIB -DQT_PRINTSUPPORT_LIB -DQT_HELP_LIB -DQT_WIDGETS_LIB -DQT_WEBKIT_LIB -DQT_MULTIMEDIA_LIB -DQT_X11EXTRAS_LIB -DQT_GUI_LIB -DQT_XML_LIB -DQT_NETWORK_LIB -DQT_SQL_LIB -DQT_CONCURRENT_LIB -DQT_CORE_LIB
-		qtsingleapplication/src/${X}.h
-		-o ${CMAKE_CURRENT_BINARY_DIR}/Release/build/moc_${X}.cpp
-	)
-
-endforeach(X)
-
+qt5_add_resources(goldendict_rc_SRCS flags.qrc resources.qrc)
+qt5_wrap_ui(goldendict_ui_SRCS
+	about.ui
+	articleview.ui
+	authentication.ui
+	dictgroupwidget.ui
+	dictheadwords.ui
+	dictinfo.ui
+	editdictionaries.ui
+	fulltextsearch.ui
+	groups.ui
+	initializing.ui
+	mainwindow.ui
+	orderandprops.ui
+	preferences.ui
+	scanflag.ui
+	scanpopup.ui
+	sources.ui
+)
 set(MOC_PREDEFS_SRCS
 	/usr/lib/x86_64-linux-gnu/qt5/mkspecs/features/data/dummy.cpp
 )
-add_executable(moc_predefs ${MOC_PREDEFS_SRCS})
+add_library(moc_predefs OBJECT ${MOC_PREDEFS_SRCS})
+set_property(TARGET moc_predefs PROPERTY LIBRARY_OUTPUT_NAME moc_predefs.h)
 target_compile_options(moc_predefs PRIVATE -dM -E)
 
-foreach(X
-	about
-	articleview
-	authentication
-	dictgroupwidget
-	dictheadwords
-	dictinfo
-	editdictionaries
-	fulltextsearch
-	groups
-	initializing
-	mainwindow
-	orderandprops
-	preferences
-	scanflag
-	scanpopup
-	sources
-)
-	add_custom_command(OUTPUT Release/build/ui_${X}.h COMMAND uic  ${X}.ui  ${CMAKE_CURRENT_BINARY_DIR}/Release/build/ui_${X}.h)
-
-endforeach(X)
-
 set(GOLDENDICT_SRCS
-	Release/build/moc_about.cpp
-	Release/build/moc_article_maker.cpp
-	Release/build/moc_article_netmgr.cpp
-	Release/build/moc_articleinspector.cpp
-	Release/build/moc_articleview.cpp
-	Release/build/moc_articlewebview.cpp
-	Release/build/moc_audioplayerinterface.cpp
-	Release/build/moc_config.cpp
-	Release/build/moc_dictheadwords.cpp
-	Release/build/moc_dictinfo.cpp
-	Release/build/moc_dictionary.cpp
-	Release/build/moc_dictionarybar.cpp
-	Release/build/moc_dictspanewidget.cpp
-	Release/build/moc_editdictionaries.cpp
-	Release/build/moc_externalaudioplayer.cpp
-	Release/build/moc_externalviewer.cpp
-	Release/build/moc_extlineedit.cpp
-	Release/build/moc_favoritespanewidget.cpp
-	Release/build/moc_ffmpegaudio.cpp
-	Release/build/moc_ffmpegaudioplayer.cpp
-	Release/build/moc_forvo.cpp
-	Release/build/moc_fulltextsearch.cpp
-	Release/build/moc_gdappstyle.cpp
-	Release/build/moc_groupcombobox.cpp
-	Release/build/moc_groups.cpp
-	Release/build/moc_groups_widgets.cpp
-	Release/build/moc_helpwindow.cpp
-	Release/build/moc_history.cpp
-	Release/build/moc_historypanewidget.cpp
-	Release/build/moc_hotkeyedit.cpp
-	Release/build/moc_hotkeywrapper.cpp
-	Release/build/moc_initializing.cpp
-	Release/build/moc_loaddictionaries.cpp
-	Release/build/moc_mainstatusbar.cpp
-	Release/build/moc_maintabwidget.cpp
-	Release/build/moc_mainwindow.cpp
-	Release/build/moc_mediawiki.cpp
-	Release/build/moc_mouseover.cpp
-	Release/build/moc_mruqmenu.cpp
-	Release/build/moc_multimediaaudioplayer.cpp
-	Release/build/moc_orderandprops.cpp
-	Release/build/moc_preferences.cpp
-	Release/build/moc_programs.cpp
-	Release/build/moc_qtlocalpeer.cpp
-	Release/build/moc_qtsingleapplication.cpp
-	Release/build/moc_scanflag.cpp
-	Release/build/moc_scanpopup.cpp
-	Release/build/moc_sources.cpp
-	Release/build/moc_stylescombobox.cpp
-	Release/build/moc_translatebox.cpp
-	Release/build/moc_webmultimediadownload.cpp
-	Release/build/moc_website.cpp
-	Release/build/moc_wordfinder.cpp
-	Release/build/moc_wordlist.cpp
-	Release/build/qrc_flags.cpp
-	Release/build/qrc_resources.cpp
 	aard.cc
 	about.cc
 	article_maker.cc
@@ -336,65 +288,59 @@ set(GOLDENDICT_SRCS
 	zipfile.cc
 	zipsounds.cc
 )
-add_executable(goldendict ${GOLDENDICT_SRCS})
+add_executable(goldendict
+	${GOLDENDICT_SRCS}
+	${goldendict_moc_SRCS}
+	${goldendict_rc_SRCS}
+	${goldendict_ui_SRCS}
+)
 target_compile_options(goldendict PRIVATE -fPIC)
 target_include_directories(goldendict PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
-install(TARGETS goldendict DESTINATION bin/goldendict)
-
-foreach(X
-	ar_SA	ay_WI	be_BY	be_BY@latin	bg_BG	cs_CZ	de_DE	el_GR	eo_EO
-	es_BO	es_ES	fa_IR	fi_FI	fr_FR	it_IT	ja_JP	ko_KR	lt_LT
-	nl_NL	pl_PL	pt_BR	qu_WI	ru_RU	sk_SK	sq_AL	sr_SR	sv_SE
-	tk_TM	tr_TR	uk_UA	vi_VN	zh_CN	zh_TW
+set(goldendict_LINKED_LIBRARIES 
+	lzo2
+	${XTST_LIBRARIES}
+	${LIBTIFF4_LIBRARIES}
+	eb
+	${VORBISFILE_LIBRARIES}
+	${VORBIS_LIBRARIES}
+	${OGG_LIBRARIES}
+	${HUNSPELL_LIBRARIES}
+	${AO_LIBRARIES}
+	-L/usr/local/lib
+	${LIBAVFORMAT_LIBRARIES}
+	${LIBAVCODEC_LIBRARIES}
+	${LIBLZMA_LIBRARIES}
+	${ZLIB_LIBRARIES}
+	${AOM_LIBRARIES}
+	${LIBSWRESAMPLE_LIBRARIES}
+	${LIBAVUTIL_LIBRARIES}
+	${CMAKE_THREAD_LIBS_INIT}
+	${VDPAU_LIBRARIES}
+	${XV_LIBRARIES}
+	${X11_LIBRARIES}
+	${XEXT_LIBRARIES}
+	Qt5::Svg
+	Qt5::WebKitWidgets
+	Qt5::PrintSupport
+	Qt5::Help
+	Qt5::Widgets
+	Qt5::WebKit
+	Qt5::Multimedia
+	Qt5::X11Extras
+	Qt5::Gui
+	Qt5::Xml
+	Qt5::Network
+	Qt5::Sql
+	Qt5::Concurrent
+	Qt5::Core
+	${GL_LIBRARIES}
+	pthread
 )
-	add_custom_command(OUTPUT Release/locale/${X}.qm COMMAND lrelease  locale/${X}.ts  ${CMAKE_CURRENT_BINARY_DIR}/Release/locale/${X}.qm)
+list(REMOVE_DUPLICATES  goldendict_LINKED_LIBRARIES)
+target_link_libraries(goldendict PRIVATE  ${goldendict_LINKED_LIBRARIES})
 
-endforeach(X)
-
-install(FILES redist/goldendict.desktop DESTINATION share/applications/goldendict.desktop)
-
-install(FILES redist/icons/goldendict.png DESTINATION share/pixmaps/goldendict.png)
-
-install(FILES redist/goldendict.appdata.xml DESTINATION share/metainfo/goldendict.appdata.xml)
-
-set( LOCALE_FILES
-	locale/ar_SA.qm
-	locale/ay_WI.qm
-	locale/be_BY.qm
-	locale/be_BY@latin.qm
-	locale/bg_BG.qm
-	locale/cs_CZ.qm
-	locale/de_DE.qm
-	locale/el_GR.qm
-	locale/eo_EO.qm
-	locale/es_AR.qm
-	locale/es_BO.qm
-	locale/es_ES.qm
-	locale/fa_IR.qm
-	locale/fi_FI.qm
-	locale/fr_FR.qm
-	locale/it_IT.qm
-	locale/ja_JP.qm
-	locale/ko_KR.qm
-	locale/lt_LT.qm
-	locale/mk_MK.qm
-	locale/nl_NL.qm
-	locale/pl_PL.qm
-	locale/pt_BR.qm
-	locale/qu_WI.qm
-	locale/ru_RU.qm
-	locale/sk_SK.qm
-	locale/sq_AL.qm
-	locale/sr_SR.qm
-	locale/sv_SE.qm
-	locale/tg_TJ.qm
-	locale/tk_TM.qm
-	locale/tr_TR.qm
-	locale/uk_UA.qm
-	locale/vi_VN.qm
-	locale/zh_CN.qm
-	locale/zh_TW.qm
+target_link_options(goldendict PRIVATE
+	-Wl,-rpath-link,/usr/lib/x86_64-linux-gnu
 )
-install(FILES ${LOCALE_FILES} DESTINATION share/goldendict/locale)
-
-install(FILES help/gdhelp_en.qch help/gdhelp_ru.qch DESTINATION share/goldendict/help)
+add_dependencies(goldendict moc_predefs)
+install(TARGETS goldendict DESTINATION bin)
