@@ -4549,7 +4549,8 @@ void MainWindow::showFullTextSearchDialog()
 {
   if( !ftsDlg )
   {
-    ftsDlg = new FTS::FullTextSearchDialog( this, cfg, dictionaries, groupInstances, ftsIndexing );
+    ftsDlg = new FTS::FullTextSearchDialog( this, cfg, dictionaries, groupInstances, ftsIndexing, getTranslateLineText() );
+    connect( ftsDlg->getHelpButton(), SIGNAL( clicked() ), this, SLOT( showFullTextSearchHelp() ) );
     addGlobalActionsToDialog( ftsDlg );
     addGroupComboBoxActionsToDialog( ftsDlg, groupList );
 
@@ -4614,6 +4615,11 @@ void MainWindow::hideGDHelp()
 {
   if( helpWindow )
     helpWindow->hide();
+}
+
+void MainWindow::showFullTextSearchHelp()
+{
+  showGDHelpForID( "Full-text search" );
 }
 
 void MainWindow::showGDHelpForID( QString const & id )

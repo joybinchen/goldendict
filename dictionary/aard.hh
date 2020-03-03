@@ -5,6 +5,7 @@
 #define __AARD_HH_INCLUDED__
 
 #include "dictionary.hh"
+// #include "dictbasic.hh"
 
 /// Support for the aard dictionaries.
 namespace Aard {

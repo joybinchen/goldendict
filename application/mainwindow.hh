@@ -474,6 +474,7 @@ private slots:
 
   void showGDHelp();
   void hideGDHelp();
+  void showFullTextSearchHelp();
 
 signals:
   /// Set optional parts expand mode for all tabs

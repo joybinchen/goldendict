@@ -241,11 +241,6 @@ Group const * Class::getGroup( unsigned id ) const
   return 0;
 }
 
-void Events::signalMutedDictionariesChanged()
-{
-  emit mutedDictionariesChanged();
-}
-
 namespace {
 
 MediaWikis makeDefaultMediaWikis( bool enable )

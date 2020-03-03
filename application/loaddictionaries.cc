@@ -2,7 +2,7 @@
  * Part of GoldenDict. Licensed under GPLv3 or later, see the LICENSE file */
 
 #include "loaddictionaries.hh"
-#include "initializing.hh"
+#include "../view/initializing.hh"
 #include "bgl.hh"
 #include "stardict.hh"
 #include "lsa.hh"

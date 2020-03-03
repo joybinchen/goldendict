@@ -4,7 +4,6 @@
 #include "fulltextsearch.hh"
 #include "ftshelpers.hh"
 #include "gddebug.hh"
-#include "mainwindow.hh"
 #include "qt4x5.hh"
 
 #include <QThreadPool>
@@ -130,7 +129,8 @@ FullTextSearchDialog::FullTextSearchDialog( QWidget * parent,
                                             Config::Class & cfg_,
                                             std::vector< sptr< Dictionary::Class > > const & dictionaries_,
                                             std::vector< Instances::Group > const & groups_,
-                                            FtsIndexing & ftsidx ) :
+                                            FtsIndexing & ftsidx,
+                                            QString const & searchLine) :
   QDialog( parent ),
   cfg( cfg_ ),
   dictionaries( dictionaries_ ),
@@ -224,9 +224,6 @@ FullTextSearchDialog::FullTextSearchDialog( QWidget * parent,
   connect( ui.OKButton, SIGNAL( clicked() ), this, SLOT( accept() ) );
   connect( ui.cancelButton, SIGNAL( clicked() ), this, SLOT( reject() ) );
 
-  connect( ui.helpButton, SIGNAL( clicked() ),
-           this, SLOT( helpRequested() ) );
-
   helpAction.setShortcut( QKeySequence( "F1" ) );
   helpAction.setShortcutContext( Qt::WidgetWithChildrenShortcut );
 
@@ -263,7 +260,7 @@ FullTextSearchDialog::FullTextSearchDialog( QWidget * parent,
 
 #endif
 
-  ui.searchLine->setText( static_cast< MainWindow * >( parent )->getTranslateLineText() );
+  ui.searchLine->setText( searchLine );
   ui.searchLine->selectAll();
 }
 
@@ -587,13 +584,10 @@ bool FullTextSearchDialog::eventFilter( QObject * obj, QEvent * ev )
   return QDialog::eventFilter( obj, ev );
 }
 
-void FullTextSearchDialog::helpRequested()
+QPushButton * FullTextSearchDialog::getHelpButton()
 {
-  MainWindow * mainWindow = qobject_cast< MainWindow * >( parentWidget() );
-  if( mainWindow )
-    mainWindow->showGDHelpForID( "Full-text search" );
+    return ui.helpButton;
 }
-
 /// HeadwordsListModel
 
 int HeadwordsListModel::rowCount( QModelIndex const & ) const

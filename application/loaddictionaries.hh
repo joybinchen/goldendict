@@ -4,7 +4,7 @@
 #ifndef __LOADDICTIONARIES_HH_INCLUDED__
 #define __LOADDICTIONARIES_HH_INCLUDED__
 
-#include "initializing.hh"
+// #include "initializing.hh"
 #include "config.hh"
 #include "dictionary.hh"
 

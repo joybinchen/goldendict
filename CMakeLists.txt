@@ -2,36 +2,8 @@ cmake_minimum_required(VERSION 2.8.8)
 project(goldendict LANGUAGES C CXX)
 
 find_package(Threads)
-add_subdirectory(locale)
-add_subdirectory(redist)
-add_subdirectory(help)
 
-find_package(Qt5 COMPONENTS Concurrent Core Gui Help Multimedia Network PrintSupport Sql Svg WebKit WebKitWidgets Widgets X11Extras Xml REQUIRED)
-find_package(PkgConfig  REQUIRED)
-pkg_check_modules(AO REQUIRED  ao)
-pkg_check_modules(AOM REQUIRED  aom)
-pkg_check_modules(GL REQUIRED  gl)
-pkg_check_modules(HUNSPELL REQUIRED  hunspell)
-pkg_check_modules(LIBAVCODEC REQUIRED  libavcodec)
-pkg_check_modules(LIBAVFORMAT REQUIRED  libavformat)
-pkg_check_modules(LIBAVUTIL REQUIRED  libavutil)
-pkg_check_modules(LIBLZMA REQUIRED  liblzma)
-pkg_check_modules(LIBSWRESAMPLE REQUIRED  libswresample)
-pkg_check_modules(LIBTIFF4 REQUIRED  libtiff-4)
-pkg_check_modules(OGG REQUIRED  ogg)
-pkg_check_modules(VDPAU REQUIRED  vdpau)
-pkg_check_modules(VORBIS REQUIRED  vorbis)
-pkg_check_modules(VORBISFILE REQUIRED  vorbisfile)
-pkg_check_modules(X11 REQUIRED  x11)
-pkg_check_modules(XEXT REQUIRED  xext)
-pkg_check_modules(XTST REQUIRED  xtst)
-pkg_check_modules(XV REQUIRED  xv)
-pkg_check_modules(ZLIB REQUIRED  zlib)
-add_compile_options(  -pipe -Wall -W)
-
-add_link_options(  -rdynamic)
-
-add_compile_definitions( 
+set(goldendict_COMPILE_DEFINITIONS
 	_REENTRANT
 	MAKE_QTMULTIMEDIA_PLAYER
 	MAKE_FFMPEG_PLAYER
@@ -40,6 +12,7 @@ add_compile_definitions(
 	PROGRAM_VERSION="1.5.0-RC2+git"
 	MAKE_ZIM_SUPPORT
 	MAKE_EXTRA_TIFF_HANDLER
+	MAKE_CHINESE_CONVERSION_SUPPORT
 	QT_NO_DEBUG
 	QT_SVG_LIB
 	QT_WEBKITWIDGETS_LIB
@@ -57,18 +30,101 @@ add_compile_definitions(
 	QT_CORE_LIB
 )
 
-set(INCLUDE_DIRS 
-	.
-	Release
-	qtsingleapplication/src
-	Release/build
-	/usr/lib/x86_64-linux-gnu/qt5/mkspecs/linux-clang
+find_package(Qt5 COMPONENTS Concurrent Core Gui Help Multimedia Network PrintSupport Sql Svg WebKit WebKitWidgets Widgets X11Extras Xml REQUIRED)
+find_package(BZip2  REQUIRED)
+find_package(PkgConfig  REQUIRED)
+pkg_check_modules(AO REQUIRED  ao)
+pkg_check_modules(AOM REQUIRED  aom)
+pkg_check_modules(GL REQUIRED  gl)
+pkg_check_modules(HUNSPELL REQUIRED  hunspell)
+pkg_check_modules(LIBAVCODEC REQUIRED  libavcodec)
+pkg_check_modules(LIBAVFORMAT REQUIRED  libavformat)
+pkg_check_modules(LIBAVUTIL REQUIRED  libavutil)
+pkg_check_modules(LIBLZMA REQUIRED  liblzma)
+pkg_check_modules(LIBSWRESAMPLE REQUIRED  libswresample)
+pkg_check_modules(LIBTIFF4 REQUIRED  libtiff-4)
+pkg_check_modules(OGG REQUIRED  ogg)
+pkg_check_modules(OPENCC REQUIRED  opencc)
+pkg_check_modules(VDPAU REQUIRED  vdpau)
+pkg_check_modules(VORBIS REQUIRED  vorbis)
+pkg_check_modules(VORBISFILE REQUIRED  vorbisfile)
+pkg_check_modules(X11 REQUIRED  x11)
+pkg_check_modules(XEXT REQUIRED  xext)
+pkg_check_modules(XTST REQUIRED  xtst)
+pkg_check_modules(XV REQUIRED  xv)
+pkg_check_modules(ZLIB REQUIRED  zlib)
+add_compile_options(  -pipe -Wall -W -fPIC)
+
+add_link_options(-Wl,--no-undefined)
+add_compile_definitions(${goldendict_COMPILE_DEFINITIONS})
+
+add_subdirectory(locale)
+add_subdirectory(redist)
+add_subdirectory(help)
+add_subdirectory(basic)
+include_directories(basic)
+
+link_libraries(goldendict-basic)
+add_subdirectory(index)
+include_directories(index)
+
+link_libraries(goldendict-index eb lzo2 ${LIBTIFF4_LIBRARIES})
+add_subdirectory(content)
+include_directories(content)
+
+link_libraries(Qt5::Network)
+add_subdirectory(webdict)
+
+link_libraries(Qt5::Svg ${OPENCC_LIBRARIES} ${VORBISFILE_LIBRARIES})
+add_subdirectory(dictionary)
+add_subdirectory(translate)
+add_subdirectory(model)
+add_subdirectory(ui)
+
+include_directories(${goldendict_ui_BINARY_DIR})
+link_libraries(Qt5::Help Qt5::X11Extras ${AOM_LIBRARIES} ${X11_LIBRARIES})
+add_subdirectory(widget)
+
+link_libraries(Qt5::Multimedia
+		${AO_LIBRARIES} ${LIBAVCODEC_LIBRARIES} ${LIBAVFORMAT_LIBRARIES})
+add_subdirectory(audio)
+
+link_libraries(goldendict-model goldendict-webdict
+		goldendict-ui goldendict-widget goldendict-audio
+		Qt5::WebKitWidgets
+		${HUNSPELL_LIBRARIES}
+)
+add_subdirectory(view)
+
+link_libraries(
+	goldendict-translate
+	goldendict-content
+	goldendict-dictionary
+	goldendict-view
+	${XTST_LIBRARIES}
+)
+add_subdirectory(application)
+add_subdirectory(test)
+
+set(INCLUDE_DIRS
+	basic
+	dictionary
+	webdict
+	${PROJECT_SOURCE_DIR}
+	ui
+	index
+	model
+	webdict
+	widget
+	view
+	audio
+	application
+	${goldendict_ui_BINARY_DIR}
 )
 list(REMOVE_DUPLICATES  INCLUDE_DIRS)
 include_directories(  ${INCLUDE_DIRS})
 
 set(ISYSTEM_DIRS 
-	${HUNSPELL_INCLUDE_DIR}
 	${AOM_INCLUDE_DIR}
 	${Qt5Concurrent_INCLUDE_DIRS}
 	${Qt5Svg_INCLUDE_DIRS}
@@ -84,81 +140,7 @@ set(ISYSTEM_DIRS
 list(REMOVE_DUPLICATES  ISYSTEM_DIRS)
 include_directories(ISYSTEM  ${ISYSTEM_DIRS})
 
-qt5_wrap_cpp(goldendict_moc_SRCS
-	about.hh
-	article_maker.hh
-	article_netmgr.hh
-	articleinspector.hh
-	articleview.hh
-	articlewebview.hh
-	audioplayerinterface.hh
-	config.hh
-	dictheadwords.hh
-	dictinfo.hh
-	dictionary.hh
-	dictionarybar.hh
-	dictspanewidget.hh
-	editdictionaries.hh
-	externalaudioplayer.hh
-	externalviewer.hh
-	extlineedit.hh
-	favoritespanewidget.hh
-	ffmpegaudio.hh
-	ffmpegaudioplayer.hh
-	forvo.hh
-	fulltextsearch.hh
-	gdappstyle.hh
-	groupcombobox.hh
-	groups.hh
-	groups_widgets.hh
-	helpwindow.hh
-	history.hh
-	historypanewidget.hh
-	hotkeyedit.hh
-	hotkeywrapper.hh
-	initializing.hh
-	loaddictionaries.hh
-	mainstatusbar.hh
-	maintabwidget.hh
-	mainwindow.hh
-	mediawiki.hh
-	mouseover.hh
-	mruqmenu.hh
-	multimediaaudioplayer.hh
-	orderandprops.hh
-	preferences.hh
-	programs.hh
-	qtsingleapplication/src/qtlocalpeer.h
-	qtsingleapplication/src/qtsingleapplication.h
-	scanflag.hh
-	scanpopup.hh
-	sources.hh
-	stylescombobox.hh
-	translatebox.hh
-	webmultimediadownload.hh
-	website.hh
-	wordfinder.hh
-	wordlist.hh
-)
 qt5_add_resources(goldendict_rc_SRCS flags.qrc resources.qrc)
-qt5_wrap_ui(goldendict_ui_SRCS
-	about.ui
-	articleview.ui
-	authentication.ui
-	dictgroupwidget.ui
-	dictheadwords.ui
-	dictinfo.ui
-	editdictionaries.ui
-	fulltextsearch.ui
-	groups.ui
-	initializing.ui
-	mainwindow.ui
-	orderandprops.ui
-	preferences.ui
-	scanflag.ui
-	scanpopup.ui
-	sources.ui
-)
 set(MOC_PREDEFS_SRCS
 	/usr/lib/x86_64-linux-gnu/qt5/mkspecs/features/data/dummy.cpp
 )
@@ -167,158 +149,20 @@ set_property(TARGET moc_predefs PROPERTY LIBRARY_OUTPUT_NAME moc_predefs.h)
 target_compile_options(moc_predefs PRIVATE -dM -E)
 
 set(GOLDENDICT_SRCS
-	aard.cc
-	about.cc
-	article_maker.cc
-	article_netmgr.cc
-	articleinspector.cc
-	articleview.cc
-	articlewebview.cc
-	atomic_rename.cc
-	audiolink.cc
-	audioplayerfactory.cc
-	belarusiantranslit.cc
-	bgl.cc
-	bgl_babylon.cc
-	broken_xrecord.cc
-	btreeidx.cc
-	chunkedstorage.cc
-	config.cc
-	country.cc
-	decompress.cc
-	delegate.cc
-	dictdfiles.cc
-	dictheadwords.cc
-	dictinfo.cc
-	dictionary.cc
-	dictionarybar.cc
-	dictserver.cc
-	dictzip.c
-	dsl.cc
-	dsl_details.cc
-	editdictionaries.cc
-	epwing.cc
-	epwing_book.cc
-	epwing_charmap.cc
-	externalaudioplayer.cc
-	externalviewer.cc
-	extlineedit.cc
-	favoritespanewidget.cc
-	ffmpegaudio.cc
-	file.cc
-	filetype.cc
-	folding.cc
-	forvo.cc
-	fsencoding.cc
-	ftshelpers.cc
-	fulltextsearch.cc
-	gdappstyle.cc
-	gddebug.cc
-	german.cc
-	gestures.cc
-	gls.cc
-	greektranslit.cc
-	groupcombobox.cc
-	groups.cc
-	groups_widgets.cc
-	helpwindow.cc
-	history.cc
-	historypanewidget.cc
-	hotkeyedit.cc
-	hotkeywrapper.cc
-	htmlescape.cc
-	hunspell.cc
-	iconv.cc
-	indexedzip.cc
-	initializing.cc
-	instances.cc
-	keyboardstate.cc
-	langcoder.cc
-	language.cc
-	loaddictionaries.cc
-	lsa.cc
 	main.cc
-	mainstatusbar.cc
-	maintabwidget.cc
-	mainwindow.cc
-	mdictparser.cc
-	mdx.cc
-	mediawiki.cc
-	mouseover.cc
-	mruqmenu.cc
-	multimediaaudioplayer.cc
-	mutex.cc
-	orderandprops.cc
-	parsecmdline.cc
-	preferences.cc
 	processwrapper.cc
-	programs.cc
-	qtsingleapplication/src/qtlocalpeer.cpp
-	qtsingleapplication/src/qtsingleapplication.cpp
-	ripemd.cc
-	romaji.cc
-	russiantranslit.cc
-	scanflag.cc
-	scanpopup.cc
-	sdict.cc
-	slob.cc
-	sounddir.cc
-	sources.cc
-	splitfile.cc
-	stardict.cc
-	stylescombobox.cc
 	termination.cc
-	tiff.cc
-	translatebox.cc
-	transliteration.cc
-	treeview.cc
-	ufile.cc
-	utf8.cc
-	voiceengines.cc
-	webmultimediadownload.cc
-	website.cc
-	wildcard.cc
-	wordfinder.cc
-	wordlist.cc
-	wstring.cc
-	wstring_qt.cc
-	xdxf.cc
-	xdxf2html.cc
-	zim.cc
-	zipfile.cc
-	zipsounds.cc
 )
 add_executable(goldendict
 	${GOLDENDICT_SRCS}
-	${goldendict_moc_SRCS}
 	${goldendict_rc_SRCS}
 	${goldendict_ui_SRCS}
 )
-target_compile_options(goldendict PRIVATE -fPIC)
-target_include_directories(goldendict PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
-set(goldendict_LINKED_LIBRARIES 
-	lzo2
-	${XTST_LIBRARIES}
-	${LIBTIFF4_LIBRARIES}
-	eb
-	${VORBISFILE_LIBRARIES}
-	${VORBIS_LIBRARIES}
-	${OGG_LIBRARIES}
-	${HUNSPELL_LIBRARIES}
-	${AO_LIBRARIES}
-	-L/usr/local/lib
-	${LIBAVFORMAT_LIBRARIES}
-	${LIBAVCODEC_LIBRARIES}
-	${LIBLZMA_LIBRARIES}
-	${ZLIB_LIBRARIES}
-	${AOM_LIBRARIES}
-	${LIBSWRESAMPLE_LIBRARIES}
-	${LIBAVUTIL_LIBRARIES}
-	${CMAKE_THREAD_LIBS_INIT}
-	${VDPAU_LIBRARIES}
-	${XV_LIBRARIES}
-	${X11_LIBRARIES}
-	${XEXT_LIBRARIES}
+target_include_directories(goldendict PRIVATE
+	${CMAKE_CURRENT_BINARY_DIR}
+        application/qtsingleapplication/src
+)
+set(goldendict_LINKED_LIBRARIES
 	Qt5::Svg
 	Qt5::WebKitWidgets
 	Qt5::PrintSupport
@@ -333,14 +177,31 @@ set(goldendict_LINKED_LIBRARIES
 	Qt5::Sql
 	Qt5::Concurrent
 	Qt5::Core
+	${XTST_LIBRARIES}
+	${OPENCC_LIBRARIES}
+	${VORBIS_LIBRARIES}
+	${OGG_LIBRARIES}
+	-L/usr/local/lib
+	${LIBAVFORMAT_LIBRARIES}
+	${LIBAVCODEC_LIBRARIES}
+	${LIBLZMA_LIBRARIES}
+	${ZLIB_LIBRARIES}
+	${LIBSWRESAMPLE_LIBRARIES}
+	${LIBAVUTIL_LIBRARIES}
+	${CMAKE_THREAD_LIBS_INIT}
+	${VDPAU_LIBRARIES}
+	${XV_LIBRARIES}
+	${XEXT_LIBRARIES}
 	${GL_LIBRARIES}
 	pthread
 )
 list(REMOVE_DUPLICATES  goldendict_LINKED_LIBRARIES)
-target_link_libraries(goldendict PRIVATE  ${goldendict_LINKED_LIBRARIES})
+target_link_libraries(goldendict ${goldendict_LINKED_LIBRARIES})
+target_link_libraries(goldendict goldendict-application)
 
 target_link_options(goldendict PRIVATE
 	-Wl,-rpath-link,/usr/lib/x86_64-linux-gnu
 )
 add_dependencies(goldendict moc_predefs)
+add_dependencies(goldendict goldendict-application)
 install(TARGETS goldendict DESTINATION bin)

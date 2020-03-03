@@ -9,7 +9,8 @@
 
 #include "dictionary.hh"
 #include "btreeidx.hh"
-#include "fulltextsearch.hh"
+#include "ftsbasic.hh"
+// #include "fulltextsearch.hh"
 #include "chunkedstorage.hh"
 #include "folding.hh"
 #include "wstring_qt.hh"

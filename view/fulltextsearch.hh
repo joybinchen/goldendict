@@ -8,6 +8,7 @@
 #include <QList>
 #include <QAction>
 
+#include "ftsbasic.hh"
 #include "dictionary.hh"
 #include "ui_fulltextsearch.h"
 #include "mutex.hh"
@@ -17,53 +18,6 @@
 
 namespace FTS
 {
-
-enum {
-  // Minimum word length for indexing
-  MinimumWordSize = 4,
-
-  // Maximum dictionary size for first iteration of FTS indexing
-  MaxDictionarySizeForFastSearch = 150000,
-
-  // Maxumum match length for highlight search results
-  // (QWebPage::findText() crashes on too long strings)
-  MaxMatchLengthForHighlightResults = 500
-};
-
-enum SearchMode
-{
-  WholeWords = 0,
-  PlainText,
-  Wildcards,
-  RegExp
-};
-
-struct FtsHeadword
-{
-  QString headword;
-  QStringList dictIDs;
-  QStringList foundHiliteRegExps;
-  bool matchCase;
-
-  FtsHeadword( QString const & headword_, QString const & dictid_,
-               QStringList hilites, bool match_case ) :
-    headword( headword_ ),
-    foundHiliteRegExps( hilites ),
-    matchCase( match_case )
-  {
-    dictIDs.append( dictid_ );
-  }
-
-  QString trimQuotes( QString const & ) const;
-
-  bool operator <( FtsHeadword const & other ) const;
-
-  bool operator ==( FtsHeadword const & other ) const
-  { return headword.compare( other.headword, Qt::CaseInsensitive ) == 0; }
-
-  bool operator !=( FtsHeadword const & other ) const
-  { return headword.compare( other.headword, Qt::CaseInsensitive ) != 0; }
-};
 
 class Indexing : public QObject, public QRunnable
 {
@@ -193,13 +147,15 @@ public:
                         Config::Class & cfg_,
                         std::vector< sptr< Dictionary::Class > > const & dictionaries_,
                         std::vector< Instances::Group > const & groups_,
-                        FtsIndexing & ftsidx );
+                        FtsIndexing & ftsidx,
+                        QString const & searchLine );
   virtual ~FullTextSearchDialog();
 
   void setCurrentGroup( unsigned group_ )
   { group = group_; updateDictionaries(); }
 
   void stopSearch();
+  QPushButton * getHelpButton();
 
 protected:
   bool eventFilter( QObject * obj, QEvent * ev );
@@ -224,7 +180,6 @@ private slots:
   void reject();
   void itemClicked( QModelIndex const & idx );
   void updateDictionaries();
-  void helpRequested();
 
 signals:
   void showTranslationFor( QString const &, QStringList const & dictIDs,

@@ -1,8 +1,8 @@
 /* This file is (c) 2008-2012 Konstantin Isakov <ikm@goldendict.org>
  * Part of GoldenDict. Licensed under GPLv3 or later, see the LICENSE file */
 
-#ifndef __DICTIONARY_HH_INCLUDED__
-#define __DICTIONARY_HH_INCLUDED__
+#ifndef __DICTBASIC_HH_INCLUDED__
+#define __DICTBASIC_HH_INCLUDED__
 
 #include <vector>
 #include <string>

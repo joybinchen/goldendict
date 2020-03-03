@@ -19,7 +19,8 @@
 #include "indexedzip.hh"
 #include "gddebug.hh"
 #include "tiff.hh"
-#include "fulltextsearch.hh"
+#include "ftsbasic.hh"
+// #include "fulltextsearch.hh"
 #include "ftshelpers.hh"
 #include "language.hh"
 

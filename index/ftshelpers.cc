@@ -1,7 +1,7 @@
 /* This file is (c) 2014 Abs62
  * Part of GoldenDict. Licensed under GPLv3 or later, see the LICENSE file */
 
-#include "fulltextsearch.hh"
+// #include "fulltextsearch.hh"
 #include "ftshelpers.hh"
 #include "wstring_qt.hh"
 #include "file.hh"
